@@ -1,0 +1,11 @@
+{
+  "Flow": {
+    "Name": "SendWelcomeEmail",
+    "Trigger": "Dataverse: New Customer",
+    "Actions": [
+      "Send Email",
+      "Log Entry",
+      "Update Customer Record"
+    ]
+  }
+}

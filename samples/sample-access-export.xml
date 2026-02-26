@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<AccessExport>
+  <Table name="Customers">
+    <Field name="CustomerID" type="AutoNumber" isPrimaryKey="true"/>
+    <Field name="Name" type="Text"/>
+    <Field name="Email" type="Text"/>
+    <Field name="CreatedDate" type="DateTime"/>
+  </Table>
+  <Relationship from="Customers.CustomerID" to="Orders.CustomerID"/>
+  <!-- Additional tables and relationships go here -->
+</AccessExport>

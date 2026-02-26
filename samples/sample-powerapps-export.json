@@ -1,0 +1,12 @@
+{
+  "App": {
+    "Name": "CustomerManagement",
+    "Entities": [
+      {
+        "Name": "Customers",
+        "Fields": ["CustomerID", "Name", "Email", "CreatedDate"]
+      }
+    ],
+    "Forms": ["Customer Form", "Order Form"]
+  }
+}
