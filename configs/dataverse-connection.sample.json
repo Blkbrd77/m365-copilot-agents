@@ -1,0 +1,9 @@
+{
+  "environment_url": "https://yourorg.crm.dynamics.com",
+  "application_id": "YOUR-APPLICATION-ID",
+  "client_secret": "YOUR-CLIENT-SECRET",
+  "tenant_id": "YOUR-TENANT-ID",
+  "scopes": [
+    "https://yourorg.crm.dynamics.com/.default"
+  ]
+}
