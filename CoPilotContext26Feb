@@ -1,0 +1,95 @@
+PROJECT: Q-1019 — Dataverse / Power Automate / Power Apps “Real Deal” Build (post-POC)
+
+GOAL
+- Replace Access FE distribution/trusted location friction with a Dataverse + Power Automate + Canvas App solution.
+- Build “real” operational app tomorrow; POC validated the hardest parts: sequencing + OData logical names + variable scoping.
+
+ENVIRONMENT / SOLUTION
+- Environment: Q-1019-POC (Sandbox)
+- Solution: Q-1019 Core
+
+BUSINESS RULES (CORE)
+1) Order Types
+- SALES: catch-all for small parts orders.
+- PROJECT: catch-all for system-level orders (longer-lived).
+
+2) SALES BaseToken Year Rule (CONFIG-DRIVEN)
+- BaseToken series is NOT based on DateReceived.
+- 576000–576999 used during calendar year 2026.
+- On 1/1/2027 BaseToken series rolls to 577000 regardless of current 576NNN progress.
+- If 576999 is reached before 12/31/2026, handle exception if/when it occurs.
+- Cutover: current paper log is ~576092; sequencing in Dataverse was intentionally seeded at 576100; will be set to “last used + 1” at go-live.
+
+3) OrderNumber Format
+<OrderBaseToken>-<QualifierCode><SystemLetter><Seq3>-<BackorderNo2>
+Example: 576040-YBP001-00
+- QualifierCode is TWO letters (e.g., YB = Yellow/Blue); about 6 qualifiers.
+- SystemLetter is ONE letter (e.g., P = Product); similar count.
+- Seq3 is always 001–999.
+- BackorderNo starts at 00; Create Backorder increments it later.
+
+4) One Order per Qualifier-Row
+- Each “qualifier row” generates one SalesOrder record.
+- Example batch: 576040-YB P001-00, 576040-YB P002-00 … 576040-YB P00N-00 (conceptually).
+
+DATAVERSE TABLES CREATED (POC FOUNDATION)
+A) AppConfig
+- Columns: ConfigKey (primary name), ConfigValue, Description.
+- Alternate key active on ConfigKey.
+- Uses built-in Modified On/By (do not create LastUpdated/UpdatedBy custom fields).
+- Data rows include: CurrentSalesYear=2026 plus other seed parameters (if used).
+
+Logical names confirmed from Dataverse output:
+- hmcsales_configkey
+- hmcsales_configvalue
+- hmcsales_description
+
+B) SalesBaseTokenSeq
+- Purpose: concurrency-safe SALES BaseToken allocator.
+- Columns: SalesYearName (text primary name), SalesYear (whole number), Seed (whole number), NextToken (whole number).
+- Alternate key active on SalesYear.
+- Seed/NextToken set to 576100 intentionally for 2026 to match cutover state.
+
+Logical names confirmed:
+- hmcsales_salesyear (whole number)
+- hmcsales_seed
+- hmcsales_nexttoken
+- hmcsales_salesbasetokenseqid (row id GUID)
+
+C) OrderSeq
+- Purpose: concurrency-safe 001–999 sequence per domain.
+- Domain key (alternate key): (Scope, BaseToken, QualifierCode, SystemLetter).
+- Columns include: Scope (text), BaseToken (text), QualifierCode (text), SystemLetter (text), NextSeq (whole number), plus OrderSeqName (text label).
+- Important: Dataverse primary name formatting is not configurable; OrderSeqName is set in Flow.
+
+Logical names (schema names as recorded in Maker):
+- hmcsales_Scope
+- hmcsales_BaseToken
+- hmcsales_QualifierCode
+- hmcsales_SystemLetter
+- hmcsales_NextSeq
+(Note: for Power Automate OData filters, logical names may need lowercase (hmcsales_scope etc.) depending on connector behavior.)
+
+POWER AUTOMATE POC FLOW (SEQUENCING HARNESS)
+Flow: POC_AllocateOrderNumber (manual trigger)
+- Inputs (manual trigger): Scope, QualifierCode, SystemLetter
+- Lessons learned:
+  1) Variables must be initialized ONCE at top level. Use Set variable inside branches/loops.
+  2) Dataverse Filter rows requires OData string filters using logical/schema names, not display names.
+  3) Copilot rewrote $filter into boolean and(...) expressions; that breaks List rows ($filter becomes false). Use concat(...) to build OData filter string.
+
+Working behavior:
+1) Read AppConfig row for CurrentSalesYear using filter:
+   hmcsales_configkey eq 'CurrentSalesYear'
+2) Allocate BaseToken:
+   - List rows SalesBaseTokenSeq filter: hmcsales_salesyear eq varSalesYear
+   - FALSE branch (row exists): set varBaseToken = hmcsales_nexttoken; update hmcsales_nexttoken = varBaseToken + 1
+3) Allocate OrderSeq:
+   - List rows OrderSeq by domain (Scope/BaseToken/QualifierCode/SystemLetter) using OData filter string (concat).
+   - If missing: set varSeq=1; create OrderSeq row with NextSeq=2; OrderSeqName = Scope-BaseToken-QualifierCode-SystemLetter
+   - If exists: set varSeq = existing NextSeq; update NextSeq = varSeq + 1
+4) Compose OrderNumber:
+   <BaseToken>-<QualifierCode><SystemLetter><Seq3>-00
+Example compose observed: "576106-YBP001-00"
+
+OBSERVATIONS
